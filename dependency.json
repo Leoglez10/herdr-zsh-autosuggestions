@@ -1,0 +1,9 @@
+{
+  "name": "zsh-autosuggestions",
+  "repository": "https://github.com/zsh-users/zsh-autosuggestions",
+  "revision": "85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5",
+  "script": "zsh-autosuggestions.zsh",
+  "script_sha256": "eec7ba8f7a71414ace0ea0fab0908d005b24cf65d83b169c0ff97815d3cfc51a",
+  "license": "MIT",
+  "license_sha256": "4598a6be0b8d7f2b708da5259d2a30d4e15e59b3c66781bab9e27744a9f859d8"
+}

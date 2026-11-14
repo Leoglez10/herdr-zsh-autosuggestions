@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""Manage one explicitly selected zsh startup file, without backups."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shlex
+import stat
+import sys
+
+ROOT = Path(__file__).resolve().parent.parent
+BEGIN = b'# >>> herdr-autosuggestions >>>'
+END = b'# <<< herdr-autosuggestions <<<'
+BLOCK = (b'\n' + BEGIN + b'\nsource ' +
+         shlex.quote(str(ROOT / 'integration.zsh')).encode() + b'\n' + END + b'\n')
+
+
+def verified():
+    metadata = json.loads((ROOT / 'dependency.json').read_text())
+    plugin = ROOT / '.cache' / 'zsh-autosuggestions.zsh'
+    if hashlib.sha256(plugin.read_bytes()).hexdigest() != metadata['script_sha256']:
+        raise ValueError('plugin checksum mismatch')
+    if not (ROOT / 'integration.zsh').is_file():
+        raise ValueError('integration.zsh is missing')
+
+
+def classify(data):
+    # Any marker-like line without exactly our block is ambiguous and unsafe.
+    marker = b'herdr-autosuggestions'
+    lines = data.splitlines()
+    count = sum(marker in line and line.lstrip().startswith(b'#') for line in lines)
+    occurrences = data.count(BLOCK)
+    if count == 0 and occurrences == 0:
+        return False
+    if count != 2 or occurrences != 1:
+        raise ValueError('ambiguous, modified, or duplicate managed block')
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Manage the Herdr Core history-suggestion startup block.')
+    parser.add_argument('action', choices=('install', 'uninstall', 'status'))
+    parser.add_argument('--rc', required=True, help='explicit path to the zsh startup file')
+    args = parser.parse_args()
+    if args.action == 'install':
+        verified()
+    flags = os.O_RDONLY if args.action == 'status' else os.O_RDWR
+    flags |= os.O_NOFOLLOW | os.O_NONBLOCK
+    try:
+        fd = os.open(args.rc, flags)
+    except FileNotFoundError:
+        if args.action != 'install':
+            print('not installed')
+            return
+        fd = os.open(args.rc, flags | os.O_CREAT | os.O_EXCL, 0o666)
+    with os.fdopen(fd, 'rb' if args.action == 'status' else 'r+b') as rc:
+        if not stat.S_ISREG(os.fstat(rc.fileno()).st_mode):
+            raise ValueError('rc must be a regular file, not a symlink')
+        data = rc.read()
+        installed = classify(data)
+        if args.action == 'install' and not installed:
+            rc.seek(0, os.SEEK_END)
+            rc.write(BLOCK)
+        elif args.action == 'uninstall' and installed:
+            before, _, after = data.partition(BLOCK)
+            separator = b'\n' if before and after and not before.endswith(b'\n') and not after.startswith(b'\n') else b''
+            rc.seek(0)
+            rc.write(before + separator + after)
+            rc.truncate()
+        print('installed' if (installed and args.action != 'uninstall') or args.action == 'install' else 'not installed')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        # Never include file contents or values in diagnostics.
+        print('manage: operation refused (' + type(exc).__name__ + ')', file=sys.stderr)
+        sys.exit(1)

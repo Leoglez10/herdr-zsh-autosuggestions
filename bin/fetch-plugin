@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Download and verify the pinned public zsh-autosuggestions dependency."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+import urllib.request
+
+ROOT = Path(__file__).resolve().parent.parent
+NAMES = ('zsh-autosuggestions.zsh', 'LICENSE')
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def read_target(directory, name):
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('cache targets must be unlinked regular files')
+        return stream.read()
+
+
+def main():
+    argparse.ArgumentParser(description='Fetch and verify the pinned public plugin and its MIT license.').parse_args()
+    metadata = json.loads((ROOT / 'dependency.json').read_text())
+    revision = metadata['revision']
+    hashes = (metadata['script_sha256'], metadata['license_sha256'])
+    if (not re.fullmatch(r'[0-9a-f]{40}', revision) or
+            metadata['script'] != NAMES[0] or
+            any(not re.fullmatch(r'[0-9a-f]{64}', h) for h in hashes)):
+        raise ValueError('invalid dependency metadata')
+    cache = ROOT / '.cache'
+    try:
+        cache.mkdir()
+    except FileExistsError:
+        pass
+    directory = os.open(cache, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        existing = [read_target(directory, name) for name in NAMES]
+        if all(data is not None and hashlib.sha256(data).hexdigest() == digest
+               for data, digest in zip(existing, hashes)):
+            print('Pinned plugin and license already verified.')
+            return
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPSHandler(), NoRedirect())
+        payloads = []
+        for name, digest in zip(NAMES, hashes):
+            url = f'https://raw.githubusercontent.com/zsh-users/zsh-autosuggestions/{revision}/{name}'
+            with opener.open(url, timeout=15) as response:
+                data = response.read(1024 * 1024 + 1)
+            if len(data) > 1024 * 1024 or hashlib.sha256(data).hexdigest() != digest:
+                raise ValueError('download checksum mismatch')
+            payloads.append(data)
+        if [read_target(directory, name) for name in NAMES] != existing:
+            raise ValueError('cache changed during download')
+        for name, data in zip(NAMES, payloads):
+            flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
+            if existing[NAMES.index(name)] is None:
+                flags |= os.O_EXCL
+            fd = os.open(name, flags, 0o644, dir_fd=directory)
+            with os.fdopen(fd, 'wb') as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                    raise ValueError('unsafe cache target')
+                stream.seek(0)
+                stream.write(data)
+                stream.truncate()
+        print('Pinned plugin and license verified.')
+    finally:
+        os.close(directory)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print('fetch-plugin: unable to verify or write dependency; check cache and network (' + type(exc).__name__ + ')', file=sys.stderr)
+        sys.exit(1)

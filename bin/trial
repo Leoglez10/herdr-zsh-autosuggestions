@@ -1,0 +1,28 @@
+#!/bin/bash
+# Local, disposable Herdr trial. Invoke with /bin/bash bin/trial.
+set -eu
+
+if [ "${1-}" = "--help" ]; then
+  printf '%s\n' 'Usage: /bin/bash bin/trial' 'Start an isolated local history-only zsh trial; exit to clean up.'
+  exit 0
+fi
+if [ "$#" -ne 0 ]; then
+  printf '%s\n' 'Usage: /bin/bash bin/trial' >&2
+  exit 2
+fi
+
+root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+state="$root/.state"
+mkdir -p -- "$state"
+trial_dir=$(mktemp -d "$state/herdr-trial.XXXXXXXX")
+cleanup() { /bin/rm -rf -- "$trial_dir"; }
+trap cleanup EXIT
+
+printf 'source %q\n' "$root/sandbox.zsh" > "$trial_dir/.zshrc"
+environment=("HOME=$trial_dir" "ZDOTDIR=$trial_dir"
+  'PATH=/usr/bin:/bin:/usr/sbin:/sbin' "TERM=${TERM:-xterm-256color}")
+if [ "${HERDR_PROBE_STATE+x}" = x ]; then
+  environment+=("HERDR_PROBE_STATE=$HERDR_PROBE_STATE")
+fi
+cd -- "$trial_dir"
+/usr/bin/env -i "${environment[@]}" /bin/zsh -d -i
