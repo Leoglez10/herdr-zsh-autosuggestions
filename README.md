@@ -1,5 +1,7 @@
 # Herdr zsh autosuggestions
 
+[![Made with gentle-ai](https://img.shields.io/badge/made%20with-gentle--ai-8A2BE2)](https://github.com/Gentleman-Programming/gentle-ai)
+
 A local zsh integration for Herdr users: see a faint continuation from shell history, or a local pathname when history has no match. Accepting a suggestion fills the command line; it does not run it. This is for people who want suggestions without changing the Herdr app.
 
 ## Quick install
