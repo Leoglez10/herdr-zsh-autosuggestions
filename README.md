@@ -2,6 +2,32 @@
 
 A local zsh integration for Herdr users: see a faint continuation from shell history, or a local pathname when history has no match. Accepting a suggestion fills the command line; it does not run it. This is for people who want suggestions without changing the Herdr app.
 
+## Quick install
+
+Tested on macOS with zsh 5.9, Python 3 and Git. Paste this into a zsh terminal; it installs into `~/.local/share/herdr-zsh-autosuggestions` and adds one marked block to your `.zshrc` (honoring `ZDOTDIR`):
+
+```sh
+git clone https://github.com/Leoglez10/herdr-zsh-autosuggestions.git ~/.local/share/herdr-zsh-autosuggestions \
+  && cd ~/.local/share/herdr-zsh-autosuggestions \
+  && python3 bin/fetch-plugin \
+  && python3 bin/manage install --rc "${ZDOTDIR:-$HOME}/.zshrc"
+```
+
+Then open a new Herdr terminal. To remove it: `python3 ~/.local/share/herdr-zsh-autosuggestions/bin/manage uninstall --rc "${ZDOTDIR:-$HOME}/.zshrc"`.
+
+### Or ask your coding agent
+
+Copy this prompt into Claude Code, Codex, Cursor or a similar agent with shell access:
+
+```text
+Install https://github.com/Leoglez10/herdr-zsh-autosuggestions for me.
+1. Clone it into ~/.local/share/herdr-zsh-autosuggestions (if it already exists, run `git pull` there instead).
+2. Run `python3 bin/fetch-plugin` from that folder; stop and report if checksum verification fails.
+3. Find my real zsh startup file: "${ZDOTDIR:-$HOME}/.zshrc". Show me the path before changing it.
+4. Run `python3 bin/manage install --rc <that path>`, then `python3 bin/manage status --rc <that path>`.
+5. Do not edit the startup file by hand, do not move the folder afterwards, and tell me to open a new Herdr terminal.
+```
+
 ## Install
 
 Tested environment: macOS, zsh 5.9 and Python 3. Git is needed to clone. From a location you intend to keep:
